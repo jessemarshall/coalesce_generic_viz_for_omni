@@ -1,0 +1,276 @@
+name: Omni-Coalesce Catalog Sync
+
+on:
+  workflow_dispatch:
+  # To enable scheduled runs, uncomment the next two lines:
+  # schedule:
+  #   - cron: '0 8 * * *'
+  # To enable auto-run on push, uncomment the next three lines:
+  # push:
+  #   branches:
+  #     - main
+
+jobs:
+  extract-omni-metadata:
+    runs-on: ubuntu-latest
+    name: Extract Omni Metadata
+    outputs:
+      models_file: ${{ steps.extract.outputs.models_file }}
+      dashboards_file: ${{ steps.extract.outputs.dashboards_file }}
+      queries_file: ${{ steps.extract.outputs.queries_file }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install package
+        run: |
+          pip install -e .
+
+      - name: Extract Omni metadata
+        id: extract
+        env:
+          OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+          OMNI_BASE_URL: ${{ vars.OMNI_BASE_URL }}
+        run: |
+          python -m omni_to_catalog.cli \
+            --steps extract
+
+          echo "models_file=./local_run_data/extracted_data/models.json" >> $GITHUB_OUTPUT
+          echo "dashboards_file=./local_run_data/extracted_data/dashboards.json" >> $GITHUB_OUTPUT
+          echo "queries_file=./local_run_data/extracted_data/queries.json" >> $GITHUB_OUTPUT
+
+          # Add to job summary
+          echo "## 📥 Extraction Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Models details
+          if [ -f "./local_run_data/extracted_data/models.json" ]; then
+            MODEL_COUNT=$(jq 'length' ./local_run_data/extracted_data/models.json)
+            echo "### 📊 Models Extracted: $MODEL_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>Click to see all models</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Model Name | Schema | Connection |" >> $GITHUB_STEP_SUMMARY
+            echo "|------------|--------|------------|" >> $GITHUB_STEP_SUMMARY
+            jq -r '.[] | "| \(.label // .name) | \(.schema_name // "N/A") | \(.connection_id // "N/A") |"' ./local_run_data/extracted_data/models.json >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Dashboards details
+          if [ -f "./local_run_data/extracted_data/dashboards.json" ]; then
+            DASHBOARD_COUNT=$(jq 'length' ./local_run_data/extracted_data/dashboards.json)
+            echo "### 📈 Dashboards Extracted: $DASHBOARD_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>Click to see all dashboards</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Dashboard Name | Tiles | Queries | Created |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------------|-------|---------|---------|" >> $GITHUB_STEP_SUMMARY
+            jq -r '.[] | "| \(.title) | \(.tiles | length) | \(.queries | length // 0) | \(.created_at // "N/A" | split("T")[0]) |"' ./local_run_data/extracted_data/dashboards.json >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Connections details
+          if [ -f "./local_run_data/extracted_data/connections.json" ]; then
+            CONNECTION_COUNT=$(jq 'length' ./local_run_data/extracted_data/connections.json 2>/dev/null || echo "0")
+            echo "### 🔌 Connections Found: $CONNECTION_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ "$CONNECTION_COUNT" -gt 0 ]; then
+              echo "<details>" >> $GITHUB_STEP_SUMMARY
+              echo "<summary>Click to see connections</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Connection Name | Type | Database |" >> $GITHUB_STEP_SUMMARY
+              echo "|-----------------|------|----------|" >> $GITHUB_STEP_SUMMARY
+              jq -r '.[] | "| \(.name // "N/A") | \(.adapter_kind // .type // "N/A") | \(.database // "N/A") |"' ./local_run_data/extracted_data/connections.json >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # File sizes
+          echo "### 📁 File Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          for file in ./local_run_data/extracted_data/*.json; do
+            if [ -f "$file" ]; then
+              FILENAME=$(basename "$file")
+              FILESIZE=$(ls -lh "$file" | awk '{print $5}')
+              echo "| $FILENAME | $FILESIZE |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload extracted data
+        uses: actions/upload-artifact@v4
+        with:
+          name: omni-metadata
+          path: ./local_run_data/extracted_data/
+          retention-days: 30
+
+  generate-bi-importer-files:
+    runs-on: ubuntu-latest
+    name: Generate BI Importer CSV Files
+    needs: extract-omni-metadata
+    outputs:
+      csv_files_generated: ${{ steps.generate.outputs.csv_files_generated }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Download Omni metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: omni-metadata
+          path: ./local_run_data/extracted_data/
+
+      - name: Install package
+        run: |
+          pip install -e .
+
+      - name: Generate BI Importer CSV files
+        id: generate
+        run: |
+          python -m omni_to_catalog.cli \
+            --steps generate
+
+          # Count generated files
+          CSV_COUNT=$(find ./local_run_data/bi_importer -name "*.csv" | wc -l)
+          echo "csv_files_generated=$CSV_COUNT" >> $GITHUB_OUTPUT
+          echo "Generated $CSV_COUNT CSV files for BI Importer"
+
+          # Add to job summary
+          echo "## 📝 CSV Generation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Total Files Generated: $CSV_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # List files with details
+          echo "### 📋 BI Importer CSV Files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File Name | Size | Rows |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|------|------|" >> $GITHUB_STEP_SUMMARY
+
+          for csv_file in ./local_run_data/bi_importer/*.csv; do
+            if [ -f "$csv_file" ]; then
+              FILENAME=$(basename "$csv_file")
+              FILESIZE=$(ls -lh "$csv_file" | awk '{print $5}')
+              ROWCOUNT=$(($(wc -l < "$csv_file") - 1))  # Subtract header row
+              echo "| $FILENAME | $FILESIZE | $ROWCOUNT |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show sample data for key files
+          if [ -f "./local_run_data/bi_importer/dashboards.csv" ]; then
+            echo "### 📊 Dashboard Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>Dashboard Names (first 20)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            tail -n +2 ./local_run_data/bi_importer/dashboards.csv | cut -d',' -f2 | head -20 | sed 's/"//g' >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### ✅ Ready for Upload" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All CSV files have been generated in BI Importer format." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload BI Importer CSV files
+        uses: actions/upload-artifact@v4
+        with:
+          name: bi-importer-csv-${{ github.run_number }}
+          path: ./local_run_data/bi_importer/*.csv
+          retention-days: 30
+
+  upload-sync-notify:
+    runs-on: ubuntu-latest
+    name: Upload, Sync Tags & Notify
+    needs: [extract-omni-metadata, generate-bi-importer-files]
+    if: ${{ needs.generate-bi-importer-files.result == 'success' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Download BI Importer CSV files
+        uses: actions/download-artifact@v4
+        with:
+          name: bi-importer-csv-${{ github.run_number }}
+          path: ./local_run_data/bi_importer/
+
+      - name: Download Omni metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: omni-metadata
+          path: ./local_run_data/extracted_data/
+
+      - name: Install package
+        run: |
+          pip install -e .
+          pip install castor-extractor
+
+      - name: Upload to Coalesce, sync tags & send Slack
+        id: upload-and-tag
+        env:
+          COALESCE_API_TOKEN: ${{ secrets.COALESCE_API_TOKEN }}
+          COALESCE_SOURCE_ID: ${{ vars.COALESCE_SOURCE_ID }}
+          COALESCE_ZONE: ${{ vars.COALESCE_ZONE || 'US' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          echo "Uploading BI Importer files and syncing tags..."
+
+          if python -m omni_to_catalog.cli --steps upload tag; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "## ✅ Upload & Tag Sync Complete" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "## ❌ Upload or Tag Sync Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check the logs above for error details." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Create issue if failed
+        if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Omni-Coalesce Sync Failed - ${new Date().toISOString().split('T')[0]}`,
+              body: `The automated Omni-Coalesce sync workflow has failed.
+
+              **Details:**
+              - Workflow Run: [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+              Please investigate and resolve the issue.`,
+              labels: ['bug', 'automation']
+            });
+            console.log(`Created issue #${issue.data.number}`);

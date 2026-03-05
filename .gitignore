@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Data files
+local_run_data/
+
+# Reports & logs
+*.html
+*.log
+logs/
+
+# Build artifacts
+build/
+dist/
+
+# Claude
+CLAUDE.md
+.claude/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Credentials
+credentials/
+secrets/
+*.key
+*.pem
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# Testing
+.coverage
+htmlcov/
+coverage/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project-specific
+.sync_state
+.last_run
+*.pid
