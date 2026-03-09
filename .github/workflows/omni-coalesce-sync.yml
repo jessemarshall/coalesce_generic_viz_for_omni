@@ -3,8 +3,8 @@ name: Omni-Coalesce Catalog Sync
 on:
   workflow_dispatch:
   # To enable scheduled runs, uncomment the next two lines:
-  # schedule:
-  #   - cron: '0 8 * * *'
+  schedule:
+    - cron: '0 8 * * *'
   # To enable auto-run on push, uncomment the next three lines:
   # push:
   #   branches:
