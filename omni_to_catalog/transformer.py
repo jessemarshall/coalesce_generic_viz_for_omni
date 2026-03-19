@@ -694,7 +694,7 @@ class OmniToBIImporter:
                 'id': workbook_model_id,
                 'dashboard_type': 'VIZ_MODEL',
                 'name': f"{dashboard_name} Model",
-                'folder_path': folder_path,
+                'folder_path': f"/__VIZ_MODEL__{folder_path}" if folder_path.startswith('/') else f"/__VIZ_MODEL__/{folder_path}",
                 'url': model_url,
                 'description': 'Workbook model for dashboard',
                 'user_name': user_name,

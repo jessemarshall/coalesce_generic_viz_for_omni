@@ -443,7 +443,7 @@ Contains all three types of entries (DASHBOARD, VIZ_MODEL, TILE) in a single fil
 | created_at | ISO timestamp | No | 2024-01-15T10:30:00Z |
 | dashboard_type | Entity type | Yes | DASHBOARD, VIZ_MODEL, or TILE |
 | description | Description | No | Entity description |
-| folder_path | Folder organization | No | /reports/sales |
+| folder_path | Folder organization (VIZ_MODEL entries are prefixed with `/__VIZ_MODEL__/`) | No | /__VIZ_MODEL__/reports/sales |
 | id | Unique identifier | Yes | Dashboard ID, Model ID, or Tile ID |
 | name | Display name | Yes | Dashboard/Model/Tile name |
 | parent_dashboards | Parent entity IDs | No | See hierarchy rules below |
@@ -542,13 +542,11 @@ This dual lineage is intentional and provides complete visibility into both the 
 
 1. **No field-level lineage for TILEs**: The BI Importer CSV format doesn't support field→TILE relationships - fields can only be linked to VIZ_MODEL entities, not to individual tiles/visualizations. Fields must be defined at the VIZ_MODEL level and the `child_dashboards` field must contain DASHBOARD IDs only.
 
-2. **No custom icons**: Generic BI integration doesn't support custom icons for VIZ_MODEL, TILE, or DASHBOARD entities. All entities use default icons.
+2. **No custom source icon**: The generic BI integration doesn't support a custom icon at the source level. Omni will appear with a generic icon in Coalesce Catalog rather than an Omni-branded icon.
 
 3. **No popularity metrics for VIZ_MODEL**: View counts and popularity metrics are only supported for DASHBOARD entities, not for VIZ_MODEL entities.
 
 4. **No popularity metrics for TILEs**: View counts and popularity metrics cannot be tracked for individual TILE entities (visualizations/charts).
-
-5. **No Data Product folders**: The generic visualization format does not support Data Product folder types. Only standard folder paths can be represented in the `folder_path` field.
 
 ### Debug Mode
 
