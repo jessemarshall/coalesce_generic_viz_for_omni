@@ -20,10 +20,10 @@ jobs:
       queries_file: ${{ steps.extract.outputs.queries_file }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -113,7 +113,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload extracted data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: omni-metadata
           path: ./local_run_data/extracted_data/
@@ -127,15 +127,15 @@ jobs:
       csv_files_generated: ${{ steps.generate.outputs.csv_files_generated }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Download Omni metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: omni-metadata
           path: ./local_run_data/extracted_data/
@@ -198,7 +198,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload BI Importer CSV files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bi-importer-csv-${{ github.run_number }}
           path: ./local_run_data/bi_importer/*.csv
@@ -211,21 +211,21 @@ jobs:
     if: ${{ needs.generate-bi-importer-files.result == 'success' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Download BI Importer CSV files
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bi-importer-csv-${{ github.run_number }}
           path: ./local_run_data/bi_importer/
 
       - name: Download Omni metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: omni-metadata
           path: ./local_run_data/extracted_data/
@@ -258,7 +258,7 @@ jobs:
 
       - name: Create issue if failed
         if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             const issue = await github.rest.issues.create({
