@@ -146,6 +146,8 @@ jobs:
 
       - name: Generate BI Importer CSV files
         id: generate
+        env:
+          OMNI_BASE_URL: ${{ vars.OMNI_BASE_URL }}
         run: |
           python -m omni_to_catalog.cli \
             --steps generate
